@@ -1,4 +1,3 @@
-// lib/services/sessionService.ts
 import {
   collection,
   doc,
@@ -9,14 +8,19 @@ import {
   where,
   orderBy,
   deleteDoc,
+  updateDoc,
+  arrayRemove,
+  arrayUnion,
+  arrayUnion as arrayPush,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
 export interface SessionConfig {
-  id?: string; // Format: YYYY-MM-DD (the date itself)
-  dateKey: string; // YYYY-MM-DD
+  id?: string;
+  dateKey: string;
   sessionCount: number;
-  sessionNames: string[]; // e.g., ["Session 1", "Session 2", "Morning", "Afternoon"]
+  sessionNames: string[];
+  activeSessions: string[]; // Tracks which sessions are active
   createdBy: string;
   createdAt: any;
   updatedAt?: any;
@@ -39,12 +43,83 @@ export const setSessionConfig = async (
     dateKey,
     sessionCount,
     sessionNames,
+    activeSessions: Array.from({ length: sessionCount }, (_, i) => `session-${i}`),
     createdBy: adminUid,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
 
   await setDoc(docRef, config, { merge: true });
+};
+
+/**
+ * Toggle individual session active/inactive
+ */
+export const toggleSessionActive = async (
+  dateKey: string,
+  sessionIndex: number,
+  isActive: boolean,
+): Promise<void> => {
+  const docRef = doc(db, SESSIONS_COLLECTION, dateKey);
+  
+  if (isActive) {
+    await updateDoc(docRef, {
+      ['activeSessions']: arrayUnion(`session-${sessionIndex}`),
+      updatedAt: new Date(),
+    });
+  } else {
+    await updateDoc(docRef, {
+      ['activeSessions']: arrayRemove(`session-${sessionIndex}`),
+      updatedAt: new Date(),
+    });
+  }
+};
+
+/**
+ * Delete individual session (remove from array and shift indices)
+ */
+export const deleteIndividualSession = async (
+  dateKey: string,
+  sessionIndex: number,
+): Promise<void> => {
+  const docRef = doc(db, SESSIONS_COLLECTION, dateKey);
+  
+  // Get current config first
+  const configSnap = await getDoc(docRef);
+  if (!configSnap.exists()) return;
+
+  const config = configSnap.data() as SessionConfig;
+  
+  // Remove session from names and active sessions
+  const newSessionNames = config.sessionNames.filter((_, idx) => idx !== sessionIndex);
+  const newActiveSessions = config.activeSessions
+    ?.map(id => {
+      const idx = parseInt(id.split('-')[1]);
+      return idx !== sessionIndex ? id : null;
+    })
+    .filter(Boolean) as string[];
+
+  // Update document with new arrays and update indices
+  await updateDoc(docRef, {
+    sessionNames: newSessionNames,
+    sessionCount: newSessionNames.length,
+    activeSessions: newActiveSessions,
+    updatedAt: new Date(),
+  });
+};
+
+/**
+ * Reorder sessions
+ */
+export const reorderSessions = async (
+  dateKey: string,
+  newSessionNames: string[],
+): Promise<void> => {
+  const docRef = doc(db, SESSIONS_COLLECTION, dateKey);
+  await updateDoc(docRef, {
+    sessionNames: newSessionNames,
+    updatedAt: new Date(),
+  });
 };
 
 /**
@@ -81,7 +156,7 @@ export const getAllSessionConfigs = async (): Promise<SessionConfig[]> => {
 };
 
 /**
- * Delete session configuration
+ * Delete entire session configuration
  */
 export const deleteSessionConfig = async (dateKey: string): Promise<void> => {
   const docRef = doc(db, SESSIONS_COLLECTION, dateKey);

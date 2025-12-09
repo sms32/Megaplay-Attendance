@@ -1,292 +1,260 @@
 'use client';
 
+import { useState } from 'react';
 import { useAuth } from './context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { isAdmin } from '@/lib/utils/adminCheck';
 import Image from 'next/image';
 
+// Animated Blobs Component (Enhanced)
+function AnimatedBlobs() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {/* Primary blob - Enhanced */}
+      <div 
+        className="absolute top-1/4 left-1/4 w-[550px] h-[550px] rounded-[60%] opacity-40"
+        style={{
+          background: 'radial-gradient(circle at 30% 30%, hsl(220, 80%, 45%) 0%, hsl(220, 70%, 35%) 40%, transparent 70%)',
+          filter: 'blur(100px)',
+          animation: 'blob1 22s ease-in-out infinite',
+        }}
+      />
+      {/* Secondary blob */}
+      <div 
+        className="absolute bottom-1/4 right-1/4 w-[450px] h-[450px] rounded-[70%] opacity-35"
+        style={{
+          background: 'radial-gradient(circle at 70% 70%, hsl(280, 75%, 50%) 0%, hsl(280, 65%, 40%) 50%, transparent 70%)',
+          filter: 'blur(90px)',
+          animation: 'blob2 28s ease-in-out infinite reverse',
+        }}
+      />
+      {/* Tertiary blob - More prominent */}
+      <div 
+        className="absolute top-1/3 right-1/3 w-[650px] h-[650px] rounded-[50%] opacity-30"
+        style={{
+          background: 'radial-gradient(circle, hsl(200, 85%, 40%) 0%, hsl(200, 70%, 30%) 50%, transparent 75%)',
+          filter: 'blur(120px)',
+          animation: 'blob3 35s ease-in-out infinite',
+        }}
+      />
+      
+      <style jsx>{`
+        @keyframes blob1 {
+          0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+          33% { transform: translate(40px, -60px) scale(1.15) rotate(120deg); }
+          66% { transform: translate(-30px, 30px) scale(0.9) rotate(240deg); }
+        }
+        @keyframes blob2 {
+          0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+          33% { transform: translate(-40px, 40px) scale(1.2) rotate(-120deg); }
+          66% { transform: translate(50px, -30px) scale(0.85) rotate(-240deg); }
+        }
+        @keyframes blob3 {
+          0%, 100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+          50% { transform: translate(-20px, 20px) scale(1.15) rotate(180deg); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// Enhanced Glass Button
+function GlassButton({ 
+  children, 
+  onClick, 
+  isLoading = false,
+  disabled = false
+}: { 
+  children: React.ReactNode; 
+  onClick: () => void; 
+  isLoading?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={isLoading || disabled}
+      className="group relative px-10 py-5 rounded-3xl overflow-hidden transition-all duration-500 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98]"
+      style={{
+        background: 'rgba(255, 255, 255, 0.08)',
+        border: '1px solid rgba(255, 255, 255, 0.15)',
+        backdropFilter: 'blur(25px)',
+        boxShadow: '0 12px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
+      }}
+      onMouseEnter={(e) => {
+        if (!isLoading && !disabled) {
+          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+          e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)';
+          e.currentTarget.style.boxShadow = '0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.25)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+        e.currentTarget.style.transform = 'translateY(0) scale(1)';
+        e.currentTarget.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)';
+      }}
+    >
+      <div className="absolute inset-0 bg-gradient-to-r from-white/10 via-transparent to-white/10 -skew-x-12 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      <span className="relative text-lg font-semibold flex items-center gap-4 text-white tracking-wide">
+        {isLoading ? (
+          <>
+            <svg className="animate-spin h-6 w-6" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            Processing...
+          </>
+        ) : (
+          children
+        )}
+      </span>
+    </button>
+  );
+}
+
+function ArrowIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className={className} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3L11 8L6 13" />
+    </svg>
+  );
+}
+
 export default function LandingPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleMarkAttendance = () => {
-    if (loading) return;
+    if (loading || isProcessing) return;
 
-    if (user) {
-      if (isAdmin(user.email)) {
-        router.push('/admin');
+    setIsProcessing(true);
+    
+    // Small delay for smooth UX
+    setTimeout(() => {
+      if (user) {
+        if (isAdmin(user.email)) {
+          router.push('/admin');
+        } else {
+          router.push('/coordinator');
+        }
       } else {
-        router.push('/pollclosed');
+        router.push('/login');
       }
-    } else {
-      router.push('/pollclosed');
-    }
+      setIsProcessing(false);
+    }, 800);
   };
 
   return (
-    <div 
-      className="min-h-screen relative overflow-hidden"
-      style={{ 
-        background: '#000000',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif'
-      }}
-    >
-      {/* Subtle gradient overlay */}
+    <div className="min-h-screen bg-gradient-to-br from-black via-slate-900/50 to-black/80 relative overflow-hidden">
+      {/* Enhanced gradient overlay */}
       <div 
-        className="absolute inset-0 opacity-40"
+        className="absolute inset-0 opacity-50 pointer-events-none"
         style={{
-          background: 'radial-gradient(ellipse at top, rgba(20, 20, 20, 0.8) 0%, transparent 50%), radial-gradient(ellipse at bottom, rgba(10, 10, 10, 0.6) 0%, transparent 50%)'
+          background: 'radial-gradient(ellipse 80% 50% at 20% 20%, rgba(59, 130, 246, 0.1) 0%, transparent 50%), radial-gradient(ellipse 60% 40% at 80% 80%, rgba(168, 85, 247, 0.1) 0%, transparent 50%), radial-gradient(ellipse at center, rgba(20, 20, 20, 0.9) 0%, transparent 70%)'
         }}
       />
 
-      {/* Grid pattern overlay */}
+      {/* Enhanced grid pattern */}
       <div 
-        className="absolute inset-0 opacity-[0.03]"
+        className="absolute inset-0 opacity-[0.04] pointer-events-none"
         style={{
-          backgroundImage: `linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px)`,
-          backgroundSize: '50px 50px'
+          backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px)',
+          backgroundSize: '60px 60px'
         }}
       />
 
-      {/* Main Content Container */}
-      <div className="relative z-10 min-h-screen">
-        {/* Desktop Layout */}
-        <div className="hidden lg:flex items-center justify-center px-12 xl:px-20 max-w-[1400px] mx-auto min-h-screen py-20">
-          <div className="flex flex-col items-center space-y-12 text-center">
-            {/* Logo/Icon placeholder - you can replace with your logo */}
-            <div className="w-20 h-20 rounded-full flex items-center justify-center"
-              style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                backdropFilter: 'blur(10px)'
-              }}
-            >
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M2 17L12 22L22 17" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M2 12L12 17L22 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
+      <AnimatedBlobs />
 
-            {/* Title */}
-            <div className="space-y-4">
-              <h1 
-                className="text-7xl xl:text-8xl font-semibold tracking-tight"
-                style={{ 
-                  color: '#ffffff',
-                  letterSpacing: '-0.02em',
-                  lineHeight: '1'
-                }}
-              >
-                MEGAPLAY
-              </h1>
-              <h2 
-                className="text-3xl xl:text-4xl font-normal"
-                style={{ 
-                  color: 'rgba(255, 255, 255, 0.6)',
-                  letterSpacing: '0.1em',
-                  fontWeight: '400'
-                }}
-              >
-                ATTENDANCE
-              </h2>
-            </div>
-
-            {/* Subtitle */}
-            <p 
-              className="text-lg xl:text-xl max-w-md"
-              style={{ 
-                color: 'rgba(255, 255, 255, 0.5)',
-                lineHeight: '1.6',
-                letterSpacing: '0.01em'
-              }}
-            >
-              Mark your presence for today&apos;s event
-            </p>
-
-            {/* Glassmorphic Button */}
-            <div className="pt-4">
-              <button
-                onClick={handleMarkAttendance}
-                disabled={loading}
-                className="group relative px-8 py-4 rounded-lg overflow-hidden transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  backdropFilter: 'blur(10px)',
-                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
-                }}
-                onMouseEnter={(e) => {
-                  if (!loading) {
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 12px 40px 0 rgba(0, 0, 0, 0.5)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 8px 32px 0 rgba(0, 0, 0, 0.37)';
-                }}
-              >
-                <span 
-                  className="relative text-base font-medium flex items-center gap-2"
-                  style={{ 
-                    color: 'rgba(255, 255, 255, 0.9)',
-                    letterSpacing: '0.05em'
-                  }}
-                >
-                  {loading ? (
-                    <>
-                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Loading...
-                    </>
-                  ) : (
-                    <>
-                      Mark Attendance
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M6 3L11 8L6 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </>
-                  )}
-                </span>
-              </button>
-            </div>
-
-            {/* Additional info */}
-            <div className="pt-8 flex items-center gap-2 text-sm"
-              style={{ 
-                color: 'rgba(255, 255, 255, 0.4)'
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
-                <path d="M8 5V8L10 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-              <span>December 09, 2025</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile/Tablet Layout */}
-        <div className="lg:hidden flex flex-col items-center justify-center min-h-screen px-6 py-12 text-center">
-          {/* Logo/Icon */}
-          <div className="w-16 h-16 rounded-full flex items-center justify-center mb-8"
+      {/* Main Content */}
+      <div className="relative z-10 min-h-screen flex items-center justify-center px-6 py-16 lg:py-24">
+        <div className="flex flex-col items-center text-center max-w-2xl">
+          
+          {/* Enhanced Larger Logo */}
+          <div 
+            className="w-28 h-28 lg:w-32 lg:h-32 rounded-3xl flex items-center justify-center mb-12 lg:mb-16 animate-[fadeInUp_0.8s_ease-out_forwards]"
             style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              backdropFilter: 'blur(10px)'
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              backdropFilter: 'blur(30px)',
+              boxShadow: '0 16px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
+              opacity: 0,
+              transform: 'translateY(30px)',
             }}
           >
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M2 17L12 22L22 17" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M2 12L12 17L22 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+            <Image
+              src="/klo2.svg"
+              alt="MegaPlay"
+              width={72}
+              height={72}
+              className="w-20 h-20 lg:w-24 lg:h-24 object-contain drop-shadow-2xl" 
+              priority={true}
+            />
           </div>
 
-          {/* Title */}
-          <div className="space-y-3 mb-6">
+          {/* Enhanced Title Section */}
+          <div className="space-y-4 lg:space-y-6 mb-8 lg:mb-12">
             <h1 
-              className="text-5xl sm:text-6xl font-semibold tracking-tight"
-              style={{ 
-                color: '#ffffff',
-                letterSpacing: '-0.02em',
-                lineHeight: '1'
-              }}
+              className="bg-gradient-to-r from-white via-white/90 to-gray-100 bg-clip-text text-transparent text-6xl sm:text-7xl lg:text-8xl xl:text-9xl font-bold tracking-[-0.05em] animate-[fadeInUp_0.8s_ease-out_0.1s_forwards]"
+              style={{ lineHeight: 1, opacity: 0, transform: 'translateY(30px)' }}
             >
               MEGAPLAY
             </h1>
             <h2 
-              className="text-2xl sm:text-3xl font-normal"
-              style={{ 
-                color: 'rgba(255, 255, 255, 0.6)',
-                letterSpacing: '0.1em',
-                fontWeight: '400'
-              }}
+              className="text-3xl sm:text-4xl lg:text-5xl font-light tracking-[0.3em] text-white/70 animate-[fadeInUp_0.8s_ease-out_0.2s_forwards] uppercase"
+              style={{ opacity: 0, transform: 'translateY(30px)' }}
             >
               ATTENDANCE
             </h2>
           </div>
 
-          {/* Subtitle */}
+          {/* Enhanced Subtitle */}
           <p 
-            className="text-base sm:text-lg mb-10 max-w-sm"
-            style={{ 
-              color: 'rgba(255, 255, 255, 0.5)',
-              lineHeight: '1.6'
-            }}
+            className="text-xl sm:text-2xl lg:text-3xl text-white/60 mb-12 lg:mb-16 max-w-lg leading-relaxed animate-[fadeInUp_0.8s_ease-out_0.3s_forwards]"
+            style={{ opacity: 0, transform: 'translateY(30px)' }}
           >
-            Mark your presence for today&apos;s event
+            {user ? (
+              `Welcome back, ${user.email.split('@')[0]}`
+            ) : (
+              'Karunya University '
+            )}
           </p>
 
-          {/* Glassmorphic Button */}
-          <button
-            onClick={handleMarkAttendance}
-            disabled={loading}
-            className="relative px-8 py-4 rounded-lg overflow-hidden transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed mb-8"
-            style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              backdropFilter: 'blur(10px)',
-              boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
-            }}
-            onTouchStart={(e) => {
-              if (!loading) {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-              }
-            }}
-            onTouchEnd={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-            }}
+          {/* Enhanced CTA */}
+          <div 
+            className="animate-[fadeInUp_0.8s_ease-out_0.4s_forwards]"
+            style={{ opacity: 0, transform: 'translateY(30px)' }}
           >
-            <span 
-              className="relative text-base font-medium flex items-center gap-2"
-              style={{ 
-                color: 'rgba(255, 255, 255, 0.9)',
-                letterSpacing: '0.05em'
-              }}
+            <GlassButton 
+              onClick={handleMarkAttendance} 
+              isLoading={isProcessing || loading}
+              disabled={loading}
             >
-              {loading ? (
-                <>
-                  <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Loading...
-                </>
-              ) : (
-                <>
-                  Mark Attendance
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M6 3L11 8L6 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </>
-              )}
-            </span>
-          </button>
-
-          {/* Additional info */}
-          <div className="flex items-center gap-2 text-sm"
-            style={{ 
-              color: 'rgba(255, 255, 255, 0.4)'
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/>
-              <path d="M8 5V8L10 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
-            <span>December 09, 2025</span>
+              {user ? 'Continue to Dashboard' : 'Mark Attendance'}
+              <ArrowIcon className="transition-all duration-500 group-hover:translate-x-2 group-hover:scale-110" />
+            </GlassButton>
           </div>
+
+          {/* Auth Status Indicator */}
+          {user && (
+            <div className="mt-8 animate-[fadeInUp_0.8s_ease-out_0.5s_forwards]" style={{ opacity: 0, transform: 'translateY(20px)' }}>
+              <div className="flex items-center gap-2 text-sm text-emerald-400/80 bg-emerald-500/10 px-4 py-2 rounded-2xl backdrop-blur-sm border border-emerald-500/20">
+                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                {isAdmin(user.email) ? 'Admin' : 'Coordinator'} • Ready
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(40px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 }
