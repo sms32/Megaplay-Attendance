@@ -51,6 +51,9 @@ const duplicateCache = new Map<string, Set<string>>();
 /**
  * Mark attendance for a student with session (LEGACY - use markAttendanceFast)
  */
+/**
+ * Mark attendance for a student with session (LEGACY - use markAttendanceFast)
+ */
 export const markAttendance = async (
   student: Student,
   category: 'od' | 'scholarship' | 'lab',
@@ -61,25 +64,25 @@ export const markAttendance = async (
   sessionName: string,
 ): Promise<AttendanceRecord> => {
   const sessionId = `${dateKey}-session-${sessionIndex}`;
+  const regNoUpper = student.regNo.toUpperCase(); // ✅ FIXED: Add this line
 
   const record: AttendanceRecord = {
-  regNo: regNoUpper,
-  studentName: student.name,
-  category,
-  coordinatorUid,
-  coordinatorEmail,
-  timestamp: serverTimestamp(),
-  dateKey,
-  sessionId,
-  sessionName,
-  sessionIndex,
-  ...(student.department && { department: student.department }),
-  ...(student.committee && { committee: student.committee }),
-  ...(student.hostel && { hostel: student.hostel }),
-  ...(student.roomNumber && { roomNumber: student.roomNumber }),
-  ...(student.phoneNumber && { phoneNumber: student.phoneNumber }),
-};
-
+    regNo: regNoUpper,
+    studentName: student.name,
+    category,
+    coordinatorUid,
+    coordinatorEmail,
+    timestamp: serverTimestamp(),
+    dateKey,
+    sessionId,
+    sessionName,
+    sessionIndex,
+    ...(student.department && { department: student.department }),
+    ...(student.committee && { committee: student.committee }),
+    ...(student.hostel && { hostel: student.hostel }),
+    ...(student.roomNumber && { roomNumber: student.roomNumber }),
+    ...(student.phoneNumber && { phoneNumber: student.phoneNumber }),
+  };
 
   const ref = collection(db, ATTENDANCE_COLLECTION);
   const docRef = await addDoc(ref, record);
@@ -90,6 +93,7 @@ export const markAttendance = async (
     timestamp: new Date(),
   };
 };
+
 
 /**
  * ⚡ OPTIMIZED: Mark attendance with immediate cache update (UPDATED with new cache logic)
