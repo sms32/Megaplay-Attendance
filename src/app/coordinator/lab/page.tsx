@@ -258,32 +258,40 @@ export default function LabAttendancePage() {
   };
 
   // Delete a lab record
-  const handleDelete = async (record: AttendanceRecord) => {
-    if (!record.id || selectedSessionIndex === null) return;
+  // 🗑️ FIXED: Delete attendance record
+const handleDelete = async (record: AttendanceRecord) => {
+  if (!record.id) return;
 
-    const confirmed = confirm(
-      `Delete LAB attendance for ${record.studentName} (${record.regNo})?\n\nThis action cannot be undone.`,
-    );
-    if (!confirmed) return;
+  const confirmed = confirm(
+    `Delete attendance for ${record.studentName} (${record.regNo})?\n\nThis action cannot be undone.`
+  );
 
-    setDeleting(record.id);
+  if (!confirmed) return;
 
-    try {
-      const sessionId = `${dateKey}-session-${selectedSessionIndex}`;
-      await deleteAttendanceRecord(record.id, record.regNo, record.category, sessionId);
+  setDeleting(record.id);
 
-      setSessionAttendance((prev) => prev.filter((r) => r.id !== record.id));
-      setStats((prev) => ({
-        total: prev.total - 1,
-        lab: record.category === 'lab' ? prev.lab - 1 : prev.lab,
-      }));
-    } catch (err) {
-      console.error('Delete error:', err);
-      setError(`❌ Failed to delete: ${err}`);
-    } finally {
-      setDeleting(null);
-    }
-  };
+  try {
+    const sessionId = `${dateKey}-session-${selectedSessionIndex!}`;
+    
+    await deleteAttendanceRecord(record.id, record.regNo, record.category, sessionId);
+
+    setSessionAttendance((prev) => prev.filter((r) => r.id !== record.id));
+
+    // ✅ FIXED: Update only existing properties
+    setStats((prev) => ({
+      total: prev.total - 1,
+      lab: prev.lab - (record.category === 'lab' ? 1 : 0),
+    }));
+
+    console.log('✅ Attendance deleted:', record.regNo);
+  } catch (err) {
+    console.error('Delete error:', err);
+    setError(`❌ Failed to delete: ${err}`);
+  } finally {
+    setDeleting(null);
+  }
+};
+
 
   const handleChangeSession = () => {
     if (selectedSessionIndex !== null) {
