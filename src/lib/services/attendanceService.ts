@@ -36,7 +36,7 @@ export interface AttendanceRecord {
   department?: string;
   phoneNumber?: string;
 
-  // ✅ AUDIT FIELDS: Track category changes
+  // ✅ NEW: Audit fields from updated version
   previousCategory?: 'od' | 'scholarship' | 'lab';
   lastUpdatedByUid?: string;
   lastUpdatedByEmail?: string;
@@ -45,11 +45,54 @@ export interface AttendanceRecord {
 
 export const ATTENDANCE_COLLECTION = 'attendance';
 
-// ✅ ADVANCED: SINGLE SESSION-LEVEL CACHE (sessionId → Set<regNo>)
+// In-memory cache for duplicate checks (session lifetime) - UPDATED to session-level only
 const duplicateCache = new Map<string, Set<string>>();
 
 /**
- * ⚡ ULTRA-FAST: Mark attendance with SESSION-LEVEL cache update
+ * Mark attendance for a student with session (LEGACY - use markAttendanceFast)
+ */
+export const markAttendance = async (
+  student: Student,
+  category: 'od' | 'scholarship' | 'lab',
+  coordinatorUid: string,
+  coordinatorEmail: string,
+  dateKey: string,
+  sessionIndex: number,
+  sessionName: string,
+): Promise<AttendanceRecord> => {
+  const sessionId = `${dateKey}-session-${sessionIndex}`;
+
+  const record: AttendanceRecord = {
+  regNo: regNoUpper,
+  studentName: student.name,
+  category,
+  coordinatorUid,
+  coordinatorEmail,
+  timestamp: serverTimestamp(),
+  dateKey,
+  sessionId,
+  sessionName,
+  sessionIndex,
+  ...(student.department && { department: student.department }),
+  ...(student.committee && { committee: student.committee }),
+  ...(student.hostel && { hostel: student.hostel }),
+  ...(student.roomNumber && { roomNumber: student.roomNumber }),
+  ...(student.phoneNumber && { phoneNumber: student.phoneNumber }),
+};
+
+
+  const ref = collection(db, ATTENDANCE_COLLECTION);
+  const docRef = await addDoc(ref, record);
+
+  return {
+    ...record,
+    id: docRef.id,
+    timestamp: new Date(),
+  };
+};
+
+/**
+ * ⚡ OPTIMIZED: Mark attendance with immediate cache update (UPDATED with new cache logic)
  */
 export const markAttendanceFast = async (
   student: Student,
@@ -88,14 +131,12 @@ export const markAttendanceFast = async (
   const ref = collection(db, ATTENDANCE_COLLECTION);
   const docRef = await addDoc(ref, record);
 
-  // ✅ SESSION-LEVEL CACHE: Track ALL students in this session
+  // update cache as before
   if (!duplicateCache.has(sessionId)) {
     duplicateCache.set(sessionId, new Set());
   }
   duplicateCache.get(sessionId)!.add(regNoUpper);
 
-  console.log(`✅ NEW: ${regNoUpper} marked ${category.toUpperCase()} in ${sessionId}`);
-  
   return {
     ...record,
     id: docRef.id,
@@ -103,8 +144,35 @@ export const markAttendanceFast = async (
   };
 };
 
+
 /**
- * ⚡ ULTRA-FAST: Check if student has ANY attendance in session (ALL categories)
+ * Check if student already marked for session (LEGACY - use hasAnyAttendanceInSession)
+ */
+export const checkDuplicateSession = async (
+  regNo: string,
+  category: 'od' | 'scholarship' | 'lab',
+  sessionId: string,
+): Promise<boolean> => {
+  try {
+    const ref = collection(db, ATTENDANCE_COLLECTION);
+    const q = query(
+      ref,
+      where('regNo', '==', regNo.toUpperCase()),
+      where('category', '==', category),
+      where('sessionId', '==', sessionId),
+      limit(1),
+    );
+
+    const snap = await getDocs(q);
+    return !snap.empty;
+  } catch (error) {
+    console.error('checkDuplicateSession error:', error);
+    return false;
+  }
+};
+
+/**
+ * ⚡ OPTIMIZED: Check if student has ANY attendance in session (replaces checkDuplicateSessionFast)
  */
 export const hasAnyAttendanceInSession = async (
   regNo: string,
@@ -112,13 +180,12 @@ export const hasAnyAttendanceInSession = async (
 ): Promise<boolean> => {
   const regNoUpper = regNo.toUpperCase();
 
-  // ⚡ INSTANT CACHE HIT (0ms)
+  // If cache says no record, we can skip query
   const cachedSet = duplicateCache.get(sessionId);
   if (cachedSet && !cachedSet.has(regNoUpper)) {
     return false;
   }
 
-  // Firestore query (100-300ms, cached after)
   const ref = collection(db, ATTENDANCE_COLLECTION);
   const q = query(
     ref,
@@ -128,19 +195,19 @@ export const hasAnyAttendanceInSession = async (
   );
   const snap = await getDocs(q);
 
-  // ✅ CACHE BOTH POSITIVE & NEGATIVE RESULTS
-  if (!duplicateCache.has(sessionId)) {
-    duplicateCache.set(sessionId, new Set());
-  }
-  if (!snap.empty) {
-    duplicateCache.get(sessionId)!.add(regNoUpper);
+  // Cache miss → cache the result
+  if (snap.empty) {
+    if (!duplicateCache.has(sessionId)) {
+      duplicateCache.set(sessionId, new Set());
+    }
+    duplicateCache.get(sessionId)!.add(regNoUpper); // Cache negative result? No, only positives
   }
 
   return !snap.empty;
 };
 
 /**
- * ⚡ PERFECT: Find existing attendance record (ANY category, latest first)
+ * Find existing attendance for a student in a session (any category). Returns ONE record or null.
  */
 export const findExistingAttendance = async (
   regNo: string,
@@ -148,7 +215,7 @@ export const findExistingAttendance = async (
 ): Promise<AttendanceRecord | null> => {
   const regNoUpper = regNo.toUpperCase();
 
-  // ⚡ INSTANT CACHE HIT
+  // If cache says no record, we can skip query
   const cachedSet = duplicateCache.get(sessionId);
   if (cachedSet && !cachedSet.has(regNoUpper)) {
     return null;
@@ -159,7 +226,6 @@ export const findExistingAttendance = async (
     ref,
     where('sessionId', '==', sessionId),
     where('regNo', '==', regNoUpper),
-    orderBy('timestamp', 'desc'),
     limit(1),
   );
   const snap = await getDocs(q);
@@ -169,14 +235,12 @@ export const findExistingAttendance = async (
   }
 
   const docSnap = snap.docs[0];
-  return { 
-    id: docSnap.id, 
-    ...(docSnap.data() as AttendanceRecord) 
-  };
+  return { id: docSnap.id, ...(docSnap.data() as AttendanceRecord) };
 };
 
 /**
- * ⚡ ADVANCED: Preload ALL session records into cache (ALL categories)
+ * ⚡ OPTIMIZED: Preload session attendance into cache on session start (UPDATED)
+ * Call this when coordinator starts a session to warm up the cache
  */
 export const preloadSessionCache = async (
   coordinatorUid: string,
@@ -188,7 +252,6 @@ export const preloadSessionCache = async (
 
     let q;
     if (category === 'all') {
-      // ✅ LOAD ALL CATEGORIES: LAB + OD + Scholarship
       q = query(
         ref,
         where('sessionId', '==', sessionId),
@@ -209,19 +272,68 @@ export const preloadSessionCache = async (
       ...(d.data() as AttendanceRecord),
     }));
 
-    // ✅ SESSION-LEVEL CACHE: ALL regNos for this session
+    // Warm duplicate cache (session-level)
     const set = new Set<string>();
     records.forEach((r) => set.add(r.regNo.toUpperCase()));
     duplicateCache.set(sessionId, set);
 
-    console.log(`✅ CACHED ${set.size} students for ${sessionId} (${category})`);
+    console.log(`✅ Preloaded ${set.size} records into cache for ${sessionId}`);
   } catch (error) {
     console.error('preloadSessionCache error:', error);
   }
 };
 
 /**
- * ⚡ PERFECT: Get session attendance (supports 'all' for combined OD/Scholarship)
+ * Clear cache for a session (call when changing sessions) - UPDATED
+ */
+export const clearSessionCache = (sessionId?: string) => {
+  if (sessionId) {
+    // Clear specific session
+    duplicateCache.delete(sessionId);
+  } else {
+    // Clear all
+    duplicateCache.clear();
+  }
+};
+
+/**
+ * Get today's attendance for coordinator + category + optional session
+ */
+export const getTodayAttendance = async (
+  coordinatorUid: string,
+  category: 'od' | 'scholarship' | 'lab',
+  dateKey: string,
+  sessionId?: string,
+): Promise<AttendanceRecord[]> => {
+  try {
+    const ref = collection(db, ATTENDANCE_COLLECTION);
+    const constraints: any[] = [
+      where('coordinatorUid', '==', coordinatorUid),
+      where('category', '==', category),
+      where('dateKey', '==', dateKey),
+    ];
+
+    if (sessionId) {
+      constraints.push(where('sessionId', '==', sessionId));
+    }
+
+    constraints.push(orderBy('timestamp', 'desc'));
+
+    const q = query(ref, ...constraints);
+    const snap = await getDocs(q);
+
+    return snap.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    } as AttendanceRecord));
+  } catch (error) {
+    console.error('getTodayAttendance error:', error);
+    return [];
+  }
+};
+
+/**
+ * Get session attendance for coordinator (used for live table updates) - UPDATED
  */
 export const getSessionAttendance = async (
   coordinatorUid: string,
@@ -233,11 +345,9 @@ export const getSessionAttendance = async (
 
     let q;
     if (category === 'all') {
-      // ✅ OD/SCHOLARSHIP PAGE: Show BOTH categories
       q = query(
         ref,
         where('sessionId', '==', sessionId),
-        where('category', 'in', ['od', 'scholarship']),
         orderBy('timestamp', 'desc'),
       );
     } else {
@@ -255,7 +365,7 @@ export const getSessionAttendance = async (
       ...(d.data() as AttendanceRecord),
     }));
 
-    // Warm SESSION-LEVEL cache
+    // Warm duplicate cache (session-level)
     const set = new Set<string>();
     records.forEach((r) => set.add(r.regNo.toUpperCase()));
     duplicateCache.set(sessionId, set);
@@ -268,69 +378,41 @@ export const getSessionAttendance = async (
 };
 
 /**
- * ✅ SEAMLESS: Update category (LAB ↔ OD/Scholarship)
+ * Get all attendance for a date + category (admin view)
  */
-export const updateAttendanceCategory = async (
-  recordId: string,
-  newCategory: 'od' | 'scholarship' | 'lab',
-  updaterUid: string,
-  updaterEmail: string,
-): Promise<void> => {
-  const ref = doc(db, ATTENDANCE_COLLECTION, recordId);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return;
-
-  const data = snap.data() as AttendanceRecord;
-
-  await updateDoc(ref, {
-    category: newCategory,
-    previousCategory: data.category,
-    lastUpdatedByUid: updaterUid,
-    lastUpdatedByEmail: updaterEmail,
-    lastUpdatedAt: serverTimestamp(),
-  });
-
-  console.log(`✅ CHANGED: ${data.regNo} ${data.category.toUpperCase()} → ${newCategory.toUpperCase()}`);
-};
-
-/**
- * ⚡ CLEANUP: Delete record + update cache
- */
-export const deleteAttendanceRecord = async (
-  id: string,
-  regNo: string,
+export const getAttendanceByDateCategory = async (
+  dateKey: string,
   category: 'od' | 'scholarship' | 'lab',
-  sessionId: string,
-): Promise<void> => {
-  // 1. Firestore delete
-  const ref = doc(db, ATTENDANCE_COLLECTION, id);
-  await deleteDoc(ref);
+  sessionId?: string,
+): Promise<AttendanceRecord[]> => {
+  try {
+    const ref = collection(db, ATTENDANCE_COLLECTION);
+    const constraints: any[] = [
+      where('dateKey', '==', dateKey),
+      where('category', '==', category),
+    ];
 
-  // 2. Remove from SESSION cache
-  const set = duplicateCache.get(sessionId);
-  if (set) {
-    set.delete(regNo.toUpperCase());
-    if (set.size === 0) {
-      duplicateCache.delete(sessionId);
+    if (sessionId) {
+      constraints.push(where('sessionId', '==', sessionId));
     }
-  }
 
-  console.log(`✅ DELETED: ${regNo} from ${sessionId}`);
+    constraints.push(orderBy('timestamp', 'asc'));
+
+    const q = query(ref, ...constraints);
+    const snap = await getDocs(q);
+
+    return snap.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    } as AttendanceRecord));
+  } catch (error) {
+    console.error('getAttendanceByDateCategory error:', error);
+    return [];
+  }
 };
 
 /**
- * ✅ RESET: Clear session cache
- */
-export const clearSessionCache = (sessionId?: string) => {
-  if (sessionId) {
-    duplicateCache.delete(sessionId);
-  } else {
-    duplicateCache.clear();
-  }
-};
-
-/**
- * 📊 ADMIN: Get all attendance with filters
+ * Admin: Get attendance with multiple filters including session
  */
 export const getAttendanceAdmin = async ({
   dateKey,
@@ -347,9 +429,15 @@ export const getAttendanceAdmin = async ({
     const ref = collection(db, ATTENDANCE_COLLECTION);
     const constraints: any[] = [where('dateKey', '==', dateKey)];
 
-    if (category) constraints.push(where('category', '==', category));
-    if (coordinatorUid) constraints.push(where('coordinatorUid', '==', coordinatorUid));
-    if (sessionId) constraints.push(where('sessionId', '==', sessionId));
+    if (category) {
+      constraints.push(where('category', '==', category));
+    }
+    if (coordinatorUid) {
+      constraints.push(where('coordinatorUid', '==', coordinatorUid));
+    }
+    if (sessionId) {
+      constraints.push(where('sessionId', '==', sessionId));
+    }
 
     constraints.push(orderBy('timestamp', 'asc'));
 
@@ -364,44 +452,8 @@ export const getAttendanceAdmin = async ({
 };
 
 /**
- * 🧹 UTILITY: Clear ALL caches (logout/page change)
+ * Get all unique sessions for a date + category (helper for UI)
  */
-export const clearAllCaches = () => {
-  duplicateCache.clear();
-  console.log('🧹 ALL caches cleared');
-};
-
-// ✅ DEPRECATED: Backward compatibility (logs warning)
-export const checkDuplicateSessionFast = async (
-  regNo: string,
-  category: 'od' | 'scholarship' | 'lab',
-  sessionId: string,
-): Promise<boolean> => {
-  console.warn('⚠️ DEPRECATED: Use hasAnyAttendanceInSession() instead');
-  return hasAnyAttendanceInSession(regNo, sessionId);
-};
-
-// ✅ BACKWARD COMPATIBILITY: Legacy functions
-export const markAttendance = markAttendanceFast; // Alias
-export const getTodayAttendance = async (
-  coordinatorUid: string,
-  category: 'od' | 'scholarship' | 'lab',
-  dateKey: string,
-  sessionId?: string,
-): Promise<AttendanceRecord[]> => {
-  const records = await getAttendanceAdmin({ dateKey, category, coordinatorUid, sessionId });
-  return records.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-};
-
-export const getAttendanceByDateCategory = async (
-  dateKey: string,
-  category: 'od' | 'scholarship' | 'lab',
-  sessionId?: string,
-): Promise<AttendanceRecord[]> => {
-  const records = await getAttendanceAdmin({ dateKey, category, sessionId });
-  return records.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-};
-
 export const getSessionsByDateCategory = async (
   dateKey: string,
   category: 'od' | 'scholarship' | 'lab',
@@ -424,20 +476,101 @@ export const getSessionsByDateCategory = async (
       }
     });
 
-    // ✅ FIXED: Map entries to objects
-    return Array.from(sessionsMap.entries()).map(([sessionId, sessionName]) => ({ sessionId, sessionName }));
+    return Array.from(sessionsMap.entries()).map(([sessionId, sessionName]) => ({
+      sessionId,
+      sessionName,
+    }));
   } catch (error) {
     console.error('getSessionsByDateCategory error:', error);
     return [];
   }
 };
 
+/**
+ * ✅ NEW: Update category for an existing attendance record (used for mode change)
+ */
+export const updateAttendanceCategory = async (
+  recordId: string,
+  newCategory: 'od' | 'scholarship' | 'lab',
+  updaterUid: string,
+  updaterEmail: string,
+): Promise<void> => {
+  const ref = doc(db, ATTENDANCE_COLLECTION, recordId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
 
-export const checkDuplicateSession = async (
+  const data = snap.data() as AttendanceRecord;
+
+  await updateDoc(ref, {
+    category: newCategory,
+    previousCategory: data.category,
+    lastUpdatedByUid: updaterUid,
+    lastUpdatedByEmail: updaterEmail,
+    lastUpdatedAt: serverTimestamp(),
+  });
+};
+
+/**
+ * Delete a single attendance record and update cache - UPDATED
+ */
+export const deleteAttendanceRecord = async (
+  id: string,
+  regNo: string,
+  category: 'od' | 'scholarship' | 'lab',
+  sessionId: string,
+): Promise<void> => {
+  // 1. Delete from Firestore
+  const ref = doc(db, ATTENDANCE_COLLECTION, id);
+  await deleteDoc(ref);
+
+  // 2. Update in-memory duplicate cache (session-level)
+  const set = duplicateCache.get(sessionId);
+  if (set) {
+    set.delete(regNo.toUpperCase());
+  }
+};
+export const checkDuplicateSessionFast = async (
   regNo: string,
   category: 'od' | 'scholarship' | 'lab',
   sessionId: string,
 ): Promise<boolean> => {
-  console.warn('⚠️ DEPRECATED: Use hasAnyAttendanceInSession()');
-  return hasAnyAttendanceInSession(regNo, sessionId);
+  const cacheKey = `${sessionId}-${category}`;
+
+  // Initialize cache if doesn't exist
+  if (!duplicateCache.has(cacheKey)) {
+    duplicateCache.set(cacheKey, new Set());
+  }
+
+  const cache = duplicateCache.get(cacheKey)!;
+  const normalizedRegNo = regNo.toUpperCase();
+
+  // Check in-memory cache first (instant - 0ms)
+  if (cache.has(normalizedRegNo)) {
+    return true;
+  }
+
+  // Check Firestore only once (slower - 100-300ms)
+  try {
+    const ref = collection(db, ATTENDANCE_COLLECTION);
+    const q = query(
+      ref,
+      where('regNo', '==', normalizedRegNo),
+      where('category', '==', category),
+      where('sessionId', '==', sessionId),
+      limit(1), // Only need to know if exists
+    );
+
+    const snap = await getDocs(q);
+    const isDuplicate = !snap.empty;
+
+    // Add to cache for future instant checks
+    if (isDuplicate) {
+      cache.add(normalizedRegNo);
+    }
+
+    return isDuplicate;
+  } catch (error) {
+    console.error('checkDuplicateSessionFast error:', error);
+    return false;
+  }
 };
