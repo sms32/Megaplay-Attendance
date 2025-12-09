@@ -18,8 +18,69 @@ import {
 } from '@/lib/services/attendanceService';
 import { getStudentCached } from '@/lib/services/studentCache';
 import { getSessionConfig, SessionConfig } from '@/lib/services/sessionService';
+import Image from 'next/image';
 
 const formatDateKey = (d: Date) => d.toISOString().split('T')[0];
+
+// Shared background shell to match landing/login/coordinator
+function BackgroundShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-[#02030a] relative overflow-hidden">
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(circle at center, rgba(30,64,175,0.45) 0%, rgba(15,23,42,0.9) 35%, rgba(3,7,18,1) 70%)',
+        }}
+      />
+      <div
+        className="absolute inset-0 opacity-[0.04] pointer-events-none"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(148,163,184,0.14) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.14) 1px, transparent 1px)',
+          backgroundSize: '60px 60px',
+        }}
+      />
+      <AnimatedBlobs />
+      <div className="relative z-10 min-h-screen flex flex-col">{children}</div>
+      <style jsx global>{`
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(40px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function AnimatedBlobs() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div
+        className="absolute -left-40 top-10 w-[520px] h-[520px] rounded-[60%] opacity-35"
+        style={{
+          background:
+            'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.7) 0%, transparent 60%)',
+          filter: 'blur(90px)',
+        }}
+      />
+      <div
+        className="absolute right-[-120px] bottom-[-40px] w-[620px] h-[620px] rounded-[60%] opacity-45"
+        style={{
+          background:
+            'radial-gradient(circle at 70% 60%, rgba(147,51,234,0.9) 0%, transparent 65%)',
+          filter: 'blur(110px)',
+        }}
+      />
+    </div>
+  );
+}
 
 export default function LabAttendancePage() {
   const { user, loading, signOut } = useAuth();
@@ -31,13 +92,17 @@ export default function LabAttendancePage() {
   // Date & Session
   const [dateKey, setDateKey] = useState(formatDateKey(new Date()));
   const [sessionConfig, setSessionConfig] = useState<SessionConfig | null>(null);
-  const [selectedSessionIndex, setSelectedSessionIndex] = useState<number | null>(null);
+  const [selectedSessionIndex, setSelectedSessionIndex] = useState<number | null>(
+    null,
+  );
   const [sessionReady, setSessionReady] = useState(false);
 
   // Scanning
   const [regNoInput, setRegNoInput] = useState('');
   const [processing, setProcessing] = useState(false);
-  const [sessionAttendance, setSessionAttendance] = useState<AttendanceRecord[]>([]);
+  const [sessionAttendance, setSessionAttendance] = useState<AttendanceRecord[]>(
+    [],
+  );
   const [lastScanned, setLastScanned] = useState<AttendanceRecord | null>(null);
   const [error, setError] = useState('');
 
@@ -135,7 +200,6 @@ export default function LabAttendancePage() {
 
     const sessionId = `${dateKey}-session-${selectedSessionIndex}`;
     if (user) {
-      // Warm LAB cache; OD/Scholarship page will warm its own
       preloadSessionCache(user.uid, 'lab', sessionId).catch((e) =>
         console.error('Cache preload failed:', e),
       );
@@ -156,9 +220,9 @@ export default function LabAttendancePage() {
     try {
       const sessionId = `${dateKey}-session-${selectedSessionIndex}`;
       const sessionName =
-        sessionConfig?.sessionNames[selectedSessionIndex] || `Session ${selectedSessionIndex + 1}`;
+        sessionConfig?.sessionNames[selectedSessionIndex] ||
+        `Session ${selectedSessionIndex + 1}`;
 
-      // 1. Lookup student in DB
       const student = await getStudentCached(regNo);
 
       if (!student) {
@@ -180,11 +244,9 @@ export default function LabAttendancePage() {
         return;
       }
 
-      // 2. Check if any attendance already exists for this session (any category)
       const existing = await findExistingAttendance(regNo, sessionId);
 
       if (!existing) {
-        // ✅ New LAB record
         const record = await markAttendanceFast(
           {
             regNo: regNo,
@@ -194,7 +256,7 @@ export default function LabAttendancePage() {
             hostel: student.hostel,
             roomNumber: student.roomNumber,
             phoneNumber: student.phoneNumber,
-          } as any, // Student shape compatible with markAttendanceFast
+          } as any,
           'lab',
           user!.uid,
           user!.email!,
@@ -209,16 +271,12 @@ export default function LabAttendancePage() {
           total: prev.total + 1,
           lab: prev.lab + 1,
         }));
-
-        console.log('✅ LAB attendance marked:', record);
       } else {
-        // There is already some category for this session
         if (existing.category === 'lab') {
           setError(
             `⚠️ ${existing.studentName} (${existing.regNo}) is already marked as LAB for this session`,
           );
         } else {
-          // existing is OD or Scholarship → offer to change to LAB
           const confirmed = confirm(
             `${existing.studentName} (${existing.regNo}) is already marked as ${existing.category.toUpperCase()} for this session.\n\nDo you want to change it to LAB?`,
           );
@@ -226,7 +284,6 @@ export default function LabAttendancePage() {
           if (confirmed && existing.id) {
             await updateAttendanceCategory(existing.id, 'lab', user!.uid, user!.email!);
 
-            // Update local state
             setSessionAttendance((prev) =>
               prev.map((r) =>
                 r.id === existing.id ? { ...r, category: 'lab' as const } : r,
@@ -244,7 +301,6 @@ export default function LabAttendancePage() {
             };
 
             setLastScanned(updated);
-            console.log('✅ Category changed to LAB:', existing.regNo);
           }
         }
       }
@@ -258,43 +314,36 @@ export default function LabAttendancePage() {
   };
 
   // Delete a lab record
-  // 🗑️ FIXED: Delete attendance record
-const handleDelete = async (record: AttendanceRecord) => {
-  if (!record.id) return;
+  const handleDelete = async (record: AttendanceRecord) => {
+    if (!record.id) return;
 
-  const confirmed = confirm(
-    `Delete attendance for ${record.studentName} (${record.regNo})?\n\nThis action cannot be undone.`
-  );
+    const confirmed = confirm(
+      `Delete attendance for ${record.studentName} (${record.regNo})?\n\nThis action cannot be undone.`,
+    );
 
-  if (!confirmed) return;
+    if (!confirmed) return;
 
-  setDeleting(record.id);
+    setDeleting(record.id);
 
-  try {
-    const sessionId = `${dateKey}-session-${selectedSessionIndex!}`;
-    
-    await deleteAttendanceRecord(record.id, record.regNo, record.category, sessionId);
+    try {
+      const sessionId = `${dateKey}-session-${selectedSessionIndex!}`;
 
-    setSessionAttendance((prev) => prev.filter((r) => r.id !== record.id));
+      await deleteAttendanceRecord(record.id, record.regNo, record.category, sessionId);
 
-    // ✅ FIXED: No dynamic indexing - explicit checks only
-    setStats((prev) => ({
-  ...prev,
-  total: prev.total - 1,
-  lab: prev.lab - (record.category === 'lab' ? 1 : 0),
-}));
+      setSessionAttendance((prev) => prev.filter((r) => r.id !== record.id));
 
-
-    console.log('✅ Attendance deleted:', record.regNo);
-  } catch (err) {
-    console.error('Delete error:', err);
-    setError(`❌ Failed to delete: ${err}`);
-  } finally {
-    setDeleting(null);
-  }
-};
-
-
+      setStats((prev) => ({
+        ...prev,
+        total: prev.total - 1,
+        lab: prev.lab - (record.category === 'lab' ? 1 : 0),
+      }));
+    } catch (err) {
+      console.error('Delete error:', err);
+      setError(`❌ Failed to delete: ${err}`);
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   const handleChangeSession = () => {
     if (selectedSessionIndex !== null) {
@@ -313,282 +362,334 @@ const handleDelete = async (record: AttendanceRecord) => {
 
   if (loading || checkingAccess || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500 mx-auto mb-4"></div>
-          <p className="text-lg">Loading...</p>
+      <BackgroundShell>
+        <div className="flex-1 flex items-center justify-center px-4">
+          <div className="w-full max-w-xs rounded-3xl bg-[radial-gradient(circle_at_top,#111827,#020617)] border border-white/10 shadow-[0_24px_120px_rgba(0,0,0,0.9)] px-8 py-10 text-center animate-[fadeInUp_0.7s_ease-out_forwards] opacity-0">
+            <div className="animate-spin rounded-full h-10 w-10 border-2 border-slate-500 border-t-white mx-auto mb-4" />
+            <p className="text-sm text-slate-100">Loading…</p>
+          </div>
         </div>
-      </div>
+      </BackgroundShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50">
+    <BackgroundShell>
       {/* Header */}
-      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-6">
+      <header className="sticky top-0 z-20 border-b border-white/10 bg-black/30 backdrop-blur-2xl px-6 sm:px-10 py-4 flex items-center justify-between shadow-[0_10px_40px_rgba(0,0,0,0.7)]">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => router.push('/coordinator')}
-            className="text-slate-400 hover:text-amber-400"
+            className="text-slate-300 hover:text-amber-300 text-xs sm:text-sm flex items-center gap-1"
           >
-            ← Back
+            <span>←</span>
+            <span className="hidden sm:inline">Back</span>
           </button>
-          <span className="font-semibold text-amber-400">LAB Attendance</span>
+          <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center overflow-hidden">
+            <Image
+              src="/klo2.svg"
+              alt="MegaPlay logo"
+              width={32}
+              height={32}
+              className="w-8 h-8 object-contain"
+              priority
+            />
+          </div>
+          <div className="flex flex-col ml-1">
+            <span className="text-sm font-semibold text-slate-100">
+              LAB Attendance
+            </span>
+            <span className="text-[11px] text-slate-400">
+              MegaPlay Coordinator • {dateKey}
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-3 text-xs">
-          <span className="text-slate-300">{user.email}</span>
+          <span className="hidden sm:block text-slate-300 max-w-[180px] truncate">
+            {user.email}
+          </span>
           <button
             onClick={handleLogout}
-            className="px-3 py-1.5 rounded-md bg-slate-800 border border-slate-600 hover:bg-slate-700"
+            className="px-3 py-1.5 rounded-full bg-white/5 border border-white/20 text-[11px] text-slate-100 hover:bg-white/10 hover:border-white/30 transition-colors"
           >
             Logout
           </button>
         </div>
       </header>
 
-      <main className="p-6 max-w-7xl mx-auto">
-        {/* Session Selection */}
-        {!sessionReady && (
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-8 mb-6">
-            <h2 className="text-xl font-semibold mb-6">Select Date & Session</h2>
+      <main className="flex-1 px-4 sm:px-8 lg:px-16 py-8">
+        <div className="max-w-6xl mx-auto">
+          {/* Session Selection */}
+          {!sessionReady && (
+            <div className="rounded-3xl bg-white/5 border border-white/15 backdrop-blur-2xl px-6 sm:px-8 py-7 sm:py-8 shadow-[0_20px_80px_rgba(0,0,0,0.9)] mb-8 animate-[fadeInUp_0.7s_ease-out_forwards] opacity-0">
+              <h2 className="text-lg sm:text-xl font-semibold text-white mb-6">
+                Select Date &amp; Session
+              </h2>
 
-            <div className="space-y-6">
-              {/* Date Picker */}
-              <div>
-                <label className="block text-sm font-medium mb-2">Date *</label>
-                <input
-                  type="date"
-                  value={dateKey}
-                  onChange={(e) => setDateKey(e.target.value)}
-                  className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-sm"
-                />
-              </div>
-
-              {/* Session Selector */}
-              {sessionConfig ? (
+              <div className="space-y-6">
+                {/* Date Picker */}
                 <div>
-                  <label className="block text-sm font-medium mb-3">
-                    Session * ({sessionConfig.sessionCount} available)
+                  <label className="block text-xs sm:text-sm font-medium mb-2 text-slate-200">
+                    Date *
                   </label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {sessionConfig.sessionNames.map((name, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setSelectedSessionIndex(idx)}
-                        className={`px-4 py-3 rounded-lg border-2 transition-all ${
-                          selectedSessionIndex === idx
-                            ? 'bg-amber-600 border-amber-600 text-slate-900 font-semibold'
-                            : 'bg-slate-800 border-slate-600 hover:border-slate-500 text-slate-300'
-                        }`}
-                      >
-                        {name}
-                      </button>
-                    ))}
-                  </div>
+                  <input
+                    type="date"
+                    value={dateKey}
+                    onChange={(e) => setDateKey(e.target.value)}
+                    className="w-full px-4 py-2 bg-black/40 border border-white/15 rounded-xl text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500/70 focus:border-transparent"
+                  />
                 </div>
-              ) : (
-                <div className="p-4 bg-red-900/50 border border-red-500 rounded-lg">
-                  <p className="text-red-300 text-sm">
+
+                {/* Session Selector */}
+                {sessionConfig ? (
+                  <div>
+                    <label className="block text-xs sm:text-sm font-medium mb-3 text-slate-200">
+                      Session * ({sessionConfig.sessionCount} available)
+                    </label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {sessionConfig.sessionNames.map((name, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setSelectedSessionIndex(idx)}
+                          className={`px-4 py-3 rounded-2xl border transition-all text-sm ${
+                            selectedSessionIndex === idx
+                              ? 'bg-amber-100 text-slate-900 border-amber-100 shadow-[0_0_0_rgba(251,191,36,0.4)]'
+                              : 'bg-black/40 border-white/15 text-slate-200 hover:border-amber-300/70 hover:bg-white/5'
+                          }`}
+                        >
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/40 text-sm text-red-200">
                     ⚠️ No sessions configured for {dateKey}. Please contact admin.
+                  </div>
+                )}
+
+                {/* Start Button */}
+                {sessionConfig && (
+                  <button
+                    onClick={handleStartSession}
+                    disabled={selectedSessionIndex === null}
+                    className="w-full px-6 py-3 rounded-2xl bg-emerald-200 text-slate-900 font-semibold text-sm shadow-[0_1px_15px_rgba(1,185,129,0.1)] hover:bg-emerald-500 disabled:opacity-10 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Start LAB Attendance for{' '}
+                    {selectedSessionIndex !== null
+                      ? sessionConfig.sessionNames[selectedSessionIndex]
+                      : 'Selected Session'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Attendance Marking */}
+          {sessionReady && selectedSessionIndex !== null && (
+            <>
+              {/* Session Info */}
+              <div className="mb-6 rounded-3xl bg-white/5 border border-purple-300/40 backdrop-blur-2xl px-6 sm:px-7 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-[0_18px_60px_rgba(0,0,0,0.9)] animate-[fadeInUp_0.7s_ease-out_forwards] opacity-0">
+                <div>
+                  <p className="text-[11px] text-slate-300/80">Active LAB Session</p>
+                  <p className="text-lg sm:text-xl font-semibold text-purple-200">
+                    {sessionConfig?.sessionNames[selectedSessionIndex]} • {dateKey}
                   </p>
                 </div>
-              )}
-
-              {/* Start Button */}
-              {sessionConfig && (
                 <button
-                  onClick={handleStartSession}
-                  disabled={selectedSessionIndex === null}
-                  className="w-full px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleChangeSession}
+                  className="px-4 py-2 rounded-2xl bg-black/40 border border-white/20 text-xs sm:text-sm text-slate-100 hover:bg-white/10 transition-colors"
                 >
-                  Start LAB Attendance for{' '}
-                  {selectedSessionIndex !== null
-                    ? sessionConfig.sessionNames[selectedSessionIndex]
-                    : 'Selected Session'}
+                  Change Session
                 </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Attendance Marking */}
-        {sessionReady && selectedSessionIndex !== null && (
-          <>
-            {/* Session Info */}
-            <div className="mb-6 p-4 bg-gradient-to-r from-amber-900/50 to-slate-900 border border-amber-700/50 rounded-xl flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Active LAB Session</p>
-                <p className="text-xl font-semibold text-amber-400">
-                  {sessionConfig?.sessionNames[selectedSessionIndex]} - {dateKey}
-                </p>
               </div>
-              <button
-                onClick={handleChangeSession}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm"
-              >
-                Change Session
-              </button>
-            </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-              <div className="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 rounded-xl p-6">
-                <div className="text-3xl font-bold text-amber-400">{stats.total}</div>
-                <div className="text-sm text-slate-400 mt-1">Total Scanned</div>
-              </div>
-              <div className="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 rounded-xl p-6">
-                <div className="text-3xl font-bold text-purple-400">{stats.lab}</div>
-                <div className="text-sm text-slate-400 mt-1">LAB Students</div>
-              </div>
-            </div>
-
-            {/* Scanner */}
-            <div className="bg-slate-900 border border-slate-700 rounded-xl p-8 mb-6">
-              <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-                <svg
-                  className="w-6 h-6 text-amber-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
-                  />
-                </svg>
-                Scan or Enter Register Number (LAB)
-              </h2>
-
-              <form onSubmit={handleScan} className="space-y-4">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={regNoInput}
-                  onChange={(e) => setRegNoInput(e.target.value)}
-                  placeholder="Scan barcode or type register number..."
-                  disabled={processing}
-                  className="w-full px-6 py-4 bg-slate-800 border-2 border-slate-600 rounded-lg text-lg font-mono focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent disabled:opacity-50"
-                  autoComplete="off"
-                />
-
-                <button
-                  type="submit"
-                  disabled={processing || !regNoInput.trim()}
-                  className="w-full px-6 py-3 bg-amber-600 hover:bg-amber-700 text-slate-900 font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {processing ? 'Processing...' : 'Mark LAB Attendance'}
-                </button>
-              </form>
-
-              {error && (
-                <div className="mt-4 p-4 bg-red-900/50 border border-red-500 rounded-lg flex items-start gap-2">
-                  <span className="text-red-300 text-sm">{error}</span>
-                </div>
-              )}
-
-              {lastScanned && (
-                <div className="mt-4 p-4 bg-emerald-900/50 border border-emerald-500 rounded-lg">
-                  <p className="text-emerald-300 font-semibold">✅ LAB Attendance Marked!</p>
-                  <div className="mt-2 text-sm text-slate-300">
-                    <p>
-                      <span className="font-semibold">{lastScanned.studentName}</span> (
-                      {lastScanned.regNo})
-                    </p>
-                    <p className="text-slate-400">
-                      {lastScanned.committee && `Committee: ${lastScanned.committee} • `}
-                      Category: LAB •{' '}
-                      {new Date(lastScanned.timestamp).toLocaleTimeString('en-IN', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </p>
+              {/* Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 animate-[fadeInUp_0.7s_ease-out_0.03s_forwards] opacity-0">
+                <div className="rounded-3xl bg-white/5 border border-white/15 backdrop-blur-2xl p-5 shadow-[0_1px_10px_rgba(0,0,0,0.9)]">
+                  <div className="text-3xl font-semibold text-amber-300">
+                    {stats.total}
                   </div>
+                  <div className="text-xs text-slate-300 mt-1">Total Scanned</div>
                 </div>
-              )}
-            </div>
-
-            {/* Session Attendance Table */}
-            <div className="bg-slate-900 border border-slate-700 rounded-xl p-6">
-              <h2 className="text-xl font-semibold mb-6">
-                LAB Session Attendance ({sessionAttendance.length})
-              </h2>
-
-              {sessionAttendance.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
-                  <p className="text-lg mb-2">No LAB attendance marked yet</p>
-                  <p className="text-sm">Scan student IDs to start</p>
+                <div className="rounded-3xl bg-white/5 border border-purple-300/40 backdrop-blur-2xl p-5 shadow-[0_1px_10px_rgba(147,51,234,0.6)]">
+                  <div className="text-3xl font-semibold text-purple-300">
+                    {stats.lab}
+                  </div>
+                  <div className="text-xs text-slate-200 mt-1">LAB Students</div>
                 </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-700">
-                        <th className="py-3 px-4 text-left font-semibold text-slate-300">Time</th>
-                        <th className="py-3 px-4 text-left font-semibold text-slate-300">
-                          Reg No
-                        </th>
-                        <th className="py-3 px-4 text-left font-semibold text-slate-300">Name</th>
-                        <th className="py-3 px-4 text-left font-semibold text-slate-300">
-                          Committee
-                        </th>
-                        <th className="py-3 px-4 text-left font-semibold text-slate-300">
-                          Category
-                        </th>
-                        <th className="py-3 px-4 text-left font-semibold text-slate-300">
-                          Action
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sessionAttendance.map((record) => (
-                        <tr key={record.id} className="border-b border-slate-800 hover:bg-slate-850">
-                          <td className="py-3 px-4 text-slate-400">
-                            {record.timestamp?.seconds
-                              ? new Date(record.timestamp.seconds * 1000).toLocaleTimeString(
-                                  'en-IN',
-                                  { hour: '2-digit', minute: '2-digit' },
-                                )
-                              : new Date(record.timestamp).toLocaleTimeString('en-IN', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
-                          </td>
-                          <td className="py-3 px-4 font-mono text-amber-400">{record.regNo}</td>
-                          <td className="py-3 px-4 font-medium">{record.studentName}</td>
-                          <td className="py-3 px-4 text-slate-400">{record.committee || '-'}</td>
-                          <td className="py-3 px-4">
-                            <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                              LAB
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <button
-                              onClick={() => handleDelete(record)}
-                              disabled={deleting === record.id}
-                              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                            >
-                              {deleting === record.id ? (
-                                <>
-                                  <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent"></div>
-                                  Deleting...
-                                </>
-                              ) : (
-                                'Delete'
-                              )}
-                            </button>
-                          </td>
+              </div>
+
+              {/* Scanner */}
+              <div className="rounded-3xl bg-white/5 border border-white/15 backdrop-blur-2xl px-6 sm:px-8 py-7 shadow-[0_20px_80px_rgba(0,0,0,0.95)] mb-8 animate-[fadeInUp_0.7s_ease-out_0.06s_forwards] opacity-0">
+                <h2 className="text-lg sm:text-xl font-semibold mb-4 flex items-center gap-2 text-white">
+                  <svg
+                    className="w-5 h-5 text-amber-300"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
+                    />
+                  </svg>
+                  Scan or Enter Register Number (LAB)
+                </h2>
+
+                <form onSubmit={handleScan} className="space-y-4">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={regNoInput}
+                    onChange={(e) => setRegNoInput(e.target.value)}
+                    placeholder="Scan barcode or type register number..."
+                    disabled={processing}
+                    className="w-full px-6 py-4 bg-black/40 border-2 border-white/15 rounded-2xl text-lg font-mono text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent disabled:opacity-50"
+                    autoComplete="off"
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={processing || !regNoInput.trim()}
+                    className="w-full px-6 py-3 rounded-2xl bg-amber-100 text-slate-900 font-semibold text-sm shadow-[0_1px_10px_rgba(251,191,36,0.1)] hover:bg-amber-200 disabled:opacity-10 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {processing ? 'Processing…' : 'Mark LAB Attendance'}
+                  </button>
+                </form>
+
+                {error && (
+                  <div className="mt-4 p-4 rounded-2xl bg-red-500/10 border border-red-500/40 flex items-start gap-2">
+                    <span className="text-red-100 text-sm">{error}</span>
+                  </div>
+                )}
+
+                {lastScanned && (
+                  <div className="mt-4 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/40">
+                    <p className="text-emerald-200 font-semibold text-sm">
+                      ✅ LAB Attendance Marked!
+                    </p>
+                    <div className="mt-1 text-xs text-slate-100">
+                      <p>
+                        <span className="font-semibold">
+                          {lastScanned.studentName}
+                        </span>{' '}
+                        ({lastScanned.regNo})
+                      </p>
+                      <p className="text-slate-300 mt-0.5">
+                        {lastScanned.committee &&
+                          `Committee: ${lastScanned.committee} • `}
+                        Category: LAB •{' '}
+                        {new Date(lastScanned.timestamp).toLocaleTimeString('en-IN', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Session Attendance Table */}
+              <div className="rounded-3xl bg-white/5 border border-white/15 backdrop-blur-2xl px-4 sm:px-6 py-6 shadow-[0_20px_80px_rgba(0,0,0,0.95)] animate-[fadeInUp_0.7s_ease-out_0.09s_forwards] opacity-0">
+                <h2 className="text-lg sm:text-xl font-semibold text-white mb-4">
+                  LAB Session Attendance ({sessionAttendance.length})
+                </h2>
+
+                {sessionAttendance.length === 0 ? (
+                  <div className="text-center py-10 text-slate-400 text-sm">
+                    <p className="mb-1">No LAB attendance marked yet.</p>
+                    <p>Scan student IDs to start filling this list.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs sm:text-sm">
+                      <thead>
+                        <tr className="border-b border-white/10">
+                          <th className="py-3 px-3 sm:px-4 text-left font-semibold text-slate-300">
+                            Time
+                          </th>
+                          <th className="py-3 px-3 sm:px-4 text-left font-semibold text-slate-300">
+                            Reg No
+                          </th>
+                          <th className="py-3 px-3 sm:px-4 text-left font-semibold text-slate-300">
+                            Name
+                          </th>
+                          <th className="py-3 px-3 sm:px-4 text-left font-semibold text-slate-300">
+                            Committee
+                          </th>
+                          <th className="py-3 px-3 sm:px-4 text-left font-semibold text-slate-300">
+                            Category
+                          </th>
+                          <th className="py-3 px-3 sm:px-4 text-left font-semibold text-slate-300">
+                            Action
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </>
-        )}
+                      </thead>
+                      <tbody>
+                        {sessionAttendance.map((record) => (
+                          <tr
+                            key={record.id}
+                            className="border-b border-white/5 hover:bg-white/5"
+                          >
+                            <td className="py-3 px-3 sm:px-4 text-slate-300">
+                              {record.timestamp?.seconds
+                                ? new Date(
+                                    record.timestamp.seconds * 1000,
+                                  ).toLocaleTimeString('en-IN', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })
+                                : new Date(
+                                    record.timestamp,
+                                  ).toLocaleTimeString('en-IN', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                            </td>
+                            <td className="py-3 px-3 sm:px-4 font-mono text-amber-300">
+                              {record.regNo}
+                            </td>
+                            <td className="py-3 px-3 sm:px-4 font-medium text-slate-100">
+                              {record.studentName}
+                            </td>
+                            <td className="py-3 px-3 sm:px-4 text-slate-300">
+                              {record.committee || '-'}
+                            </td>
+                            <td className="py-3 px-3 sm:px-4">
+                              <span className="px-3 py-1 rounded-full text-[10px] sm:text-xs font-medium bg-purple-500/20 text-purple-200 border border-purple-400/40">
+                                LAB
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 sm:px-4">
+                              <button
+                                onClick={() => handleDelete(record)}
+                                disabled={deleting === record.id}
+                                className="px-3 py-1.5 rounded-2xl bg-red-500 text-white text-[10px] sm:text-xs font-medium hover:bg-red-400 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                              >
+                                {deleting === record.id ? (
+                                  <>
+                                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                                    Deleting…
+                                  </>
+                                ) : (
+                                  'Delete'
+                                )}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </main>
-    </div>
+    </BackgroundShell>
   );
 }
