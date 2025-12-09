@@ -286,37 +286,40 @@ export default function ODScholarshipAttendancePage() {
 
   // Delete attendance record
   const handleDelete = async (record: AttendanceRecord) => {
-    if (!record.id) return;
+  if (!record.id) return;
 
-    const confirmed = confirm(
-      `Delete attendance for ${record.studentName} (${record.regNo})?\n\nThis action cannot be undone.`
-    );
+  const confirmed = confirm(
+    `Delete attendance for ${record.studentName} (${record.regNo})?\n\nThis action cannot be undone.`
+  );
 
-    if (!confirmed) return;
+  if (!confirmed) return;
 
-    setDeleting(record.id);
+  setDeleting(record.id);
 
-    try {
-      const sessionId = `${dateKey}-session-${selectedSessionIndex}`;
-      
-      await deleteAttendanceRecord(record.id, record.regNo, record.category, sessionId);
+  try {
+    const sessionId = `${dateKey}-session-${selectedSessionIndex!}`;
+    
+    await deleteAttendanceRecord(record.id, record.regNo, record.category, sessionId);
 
-      setSessionAttendance((prev) => prev.filter((r) => r.id !== record.id));
+    setSessionAttendance((prev) => prev.filter((r) => r.id !== record.id));
 
-      setStats((prev) => ({
-        ...prev,
-        total: prev.total - 1,
-        [record.category]: prev[record.category] - 1,
-      }));
+    // ✅ FIXED: No dynamic indexing - explicit checks only
+    setStats((prev) => ({
+      ...prev,
+      total: prev.total - 1,
+      od: prev.od - (record.category === 'od' ? 1 : 0),
+      scholarship: prev.scholarship - (record.category === 'scholarship' ? 1 : 0),
+    }));
 
-      console.log('✅ Attendance deleted:', record.regNo);
-    } catch (err) {
-      console.error('Delete error:', err);
-      setError(`❌ Failed to delete: ${err}`);
-    } finally {
-      setDeleting(null);
-    }
-  };
+    console.log('✅ Attendance deleted:', record.regNo);
+  } catch (err) {
+    console.error('Delete error:', err);
+    setError(`❌ Failed to delete: ${err}`);
+  } finally {
+    setDeleting(null);
+  }
+};
+
 
   // Clear cache when changing sessions
   const handleChangeSession = () => {

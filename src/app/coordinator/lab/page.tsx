@@ -277,10 +277,12 @@ const handleDelete = async (record: AttendanceRecord) => {
 
     setSessionAttendance((prev) => prev.filter((r) => r.id !== record.id));
 
-    // ✅ FIXED: Update only existing properties
+    // ✅ FIXED: No dynamic indexing - explicit checks only
     setStats((prev) => ({
+      ...prev,
       total: prev.total - 1,
-      lab: prev.lab - (record.category === 'lab' ? 1 : 0),
+      od: prev.od - (record.category === 'od' ? 1 : 0),
+      scholarship: prev.scholarship - (record.category === 'scholarship' ? 1 : 0),
     }));
 
     console.log('✅ Attendance deleted:', record.regNo);
@@ -291,6 +293,7 @@ const handleDelete = async (record: AttendanceRecord) => {
     setDeleting(null);
   }
 };
+
 
 
   const handleChangeSession = () => {
