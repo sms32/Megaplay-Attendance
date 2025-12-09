@@ -216,10 +216,11 @@ export default function LandingPage() {
             style={{ opacity: 0, transform: 'translateY(30px)' }}
           >
             {user ? (
-              `Welcome back, ${user.email.split('@')[0]}`
-            ) : (
-              'Karunya University '
-            )}
+  `Welcome back, ${(user.email ?? '').split('@')[0] || 'User'}`
+) : (
+  'Karunya University '
+)}
+
           </p>
 
           {/* Enhanced CTA */}
