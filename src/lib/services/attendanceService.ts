@@ -408,23 +408,30 @@ export const getSessionsByDateCategory = async (
 ): Promise<{ sessionId: string; sessionName: string }[]> => {
   try {
     const ref = collection(db, ATTENDANCE_COLLECTION);
-    const q = query(ref, where('dateKey', '==', dateKey), where('category', '==', category));
+    const q = query(
+      ref,
+      where('dateKey', '==', dateKey),
+      where('category', '==', category),
+    );
+
     const snap = await getDocs(q);
     const sessionsMap = new Map<string, string>();
 
     snap.docs.forEach((doc) => {
       const data = doc.data() as AttendanceRecord;
       if (data.sessionId && !sessionsMap.has(data.sessionId)) {
-        sessionsMap.set(data.sessionId, data.sessionName);
+        sessionsMap.set(data.sessionId, data.sessionName || data.sessionId);
       }
     });
 
-    return Array.from(sessionsMap.entries());
+    // ✅ FIXED: Map entries to objects
+    return Array.from(sessionsMap.entries()).map(([sessionId, sessionName]) => ({ sessionId, sessionName }));
   } catch (error) {
     console.error('getSessionsByDateCategory error:', error);
     return [];
   }
 };
+
 
 export const checkDuplicateSession = async (
   regNo: string,
