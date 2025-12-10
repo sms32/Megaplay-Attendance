@@ -14,7 +14,7 @@ import {
   Student,
 } from '@/lib/services/studentService';
 
-function CategoryToggle({
+export function CategoryToggle({
   value,
   onChange,
   disabled,

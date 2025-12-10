@@ -11,7 +11,7 @@ import {
   Student,
   parseCSV,
 } from '@/lib/services/studentService';
-import { CategoryToggle } from './upload/page'; // Reuse your component
+import { CategoryToggle } from '../students/page';
 
 export default function BulkFetchStudentsPage() {
   const { user, loading } = useAuth();
