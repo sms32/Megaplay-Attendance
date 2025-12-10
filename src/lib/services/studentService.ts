@@ -506,3 +506,77 @@ export const updateStudentCategories = async (
     updatedAt: new Date(),
   });
 };
+// Add this new function to lib/services/studentService.ts
+
+/**
+ * Advanced search with filters
+ * Supports partial matching and field-specific search
+ */
+export const advancedSearchStudents = async (filters: {
+  searchField: 'all' | 'regNo' | 'name' | 'committee' | 'department' | 'hostel' | 'phone';
+  searchQuery: string;
+  categoryFilter: 'all' | 'od' | 'scholarship' | 'none';
+}): Promise<Student[]> => {
+  try {
+    const allStudents = await getAllStudents();
+    const query = filters.searchQuery.toLowerCase().trim();
+    
+    let results = allStudents;
+    
+    // Apply text search filter
+    if (query) {
+      results = results.filter((student) => {
+        switch (filters.searchField) {
+          case 'regNo':
+            return student.regNo.toLowerCase().includes(query);
+          case 'name':
+            return student.name.toLowerCase().includes(query);
+          case 'committee':
+            return student.committee?.toLowerCase().includes(query);
+          case 'department':
+            return student.department?.toLowerCase().includes(query);
+          case 'hostel':
+            return student.hostel?.toLowerCase().includes(query);
+          case 'phone':
+            return student.phoneNumber?.toLowerCase().includes(query);
+          case 'all':
+          default:
+            // Search across all fields
+            return (
+              student.regNo.toLowerCase().includes(query) ||
+              student.name.toLowerCase().includes(query) ||
+              student.committee?.toLowerCase().includes(query) ||
+              student.department?.toLowerCase().includes(query) ||
+              student.hostel?.toLowerCase().includes(query) ||
+              student.phoneNumber?.toLowerCase().includes(query) ||
+              student.roomNumber?.toLowerCase().includes(query)
+            );
+        }
+      });
+    }
+    
+    // Apply category filter
+    if (filters.categoryFilter !== 'all') {
+      results = results.filter((student) => {
+        const hasOd = student.categories?.od === true;
+        const hasScholarship = student.categories?.scholarship === true;
+        
+        switch (filters.categoryFilter) {
+          case 'od':
+            return hasOd;
+          case 'scholarship':
+            return hasScholarship;
+          case 'none':
+            return !hasOd && !hasScholarship;
+          default:
+            return true;
+        }
+      });
+    }
+    
+    return results;
+  } catch (error) {
+    console.error('advancedSearchStudents error:', error);
+    return [];
+  }
+};
