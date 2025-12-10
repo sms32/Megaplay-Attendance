@@ -24,3 +24,25 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+/* stylish dark scrollbar */
+.scrollbar-styled {
+  scrollbar-width: thin;
+  scrollbar-color: #64748b transparent; /* thumb, track */
+}
+
+.scrollbar-styled::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-styled::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-styled::-webkit-scrollbar-thumb {
+  background-color: #64748b; /* slate-500 */
+  border-radius: 999px;
+}
+
+.scrollbar-styled::-webkit-scrollbar-thumb:hover {
+  background-color: #e5e7eb; /* slate-200/hover-ish */
+}

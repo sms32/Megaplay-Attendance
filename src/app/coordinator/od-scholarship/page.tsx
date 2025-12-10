@@ -474,7 +474,7 @@ export default function ODScholarshipAttendancePage() {
                           onClick={() => setSelectedSessionIndex(idx)}
                           className={`px-4 py-3 rounded-2xl border transition-all text-sm ${
                             selectedSessionIndex === idx
-                              ? 'bg-amber-400 text-slate-900 border-amber-400 shadow-[0_12px_40px_rgba(251,191,36,0.4)]'
+                              ? 'bg-amber-100 text-slate-900 border-amber-100 shadow-[0_1px_10px_rgba(251,191,36,0.4)]'
                               : 'bg-black/40 border-white/15 text-slate-200 hover:border-amber-300/70 hover:bg-white/5'
                           }`}
                         >
@@ -494,7 +494,7 @@ export default function ODScholarshipAttendancePage() {
                   <button
                     onClick={handleStartSession}
                     disabled={selectedSessionIndex === null}
-                    className="w-full px-6 py-3 rounded-2xl bg-emerald-500 text-slate-900 font-semibold text-sm shadow-[0_14px_45px_rgba(16,185,129,0.5)] hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="w-full px-6 py-3 rounded-2xl bg-emerald-500 text-slate-900 font-semibold text-sm shadow-[0_1px_10px_rgba(16,185,129,0.5)] hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Start Attendance for{' '}
                     {selectedSessionIndex !== null

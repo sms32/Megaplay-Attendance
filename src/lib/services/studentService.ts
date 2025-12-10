@@ -12,6 +12,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { updateDoc } from 'firebase/firestore';
 
 export interface Student {
   regNo: string; // Primary key (e.g., "21BECE1001")
@@ -406,4 +407,102 @@ export const parseCSV = (csvText: string): { headers: string[]; rows: any[] } =>
   }
 
   return { headers, rows };
+};
+
+
+// Add these imports if missing
+
+/**
+ * Bulk fetch students by regNos (parallel optimized)
+ */
+export const bulkFetchStudentsByRegNos = async (regNos: string[]): Promise<{
+  found: Student[];
+  notFound: string[];
+}> => {
+  try {
+    const upperRegNos = regNos.map(r => r.toUpperCase().trim()).filter(Boolean);
+    const fetchPromises = upperRegNos.map(regNo => getStudentByRegNo(regNo));
+    const results = await Promise.all(fetchPromises);
+    
+    const found = results.filter(Boolean) as Student[];
+    const notFound = upperRegNos.filter((_, i) => !results[i]);
+    
+    return { found, notFound };
+  } catch (error: any) {
+    console.error('bulkFetchStudentsByRegNos error:', error.message);
+    return { found: [], notFound: regNos };
+  }
+};
+
+/**
+ * Bulk delete students (chunked batches like your upload)
+ */
+const processDeleteBatch = async (regNos: string[]): Promise<{ success: number; errors: string[] }> => {
+  const batch = writeBatch(db);
+  const errors: string[] = [];
+  let success = 0;
+
+  regNos.forEach(regNo => {
+    try {
+      const regNoUpper = regNo.toUpperCase().trim();
+      const ref = doc(db, STUDENTS_COLLECTION, regNoUpper);
+      batch.delete(ref);
+      success++;
+    } catch (err) {
+      errors.push(`Delete ${regNo}: ${err}`);
+    }
+  });
+
+  try {
+    await batch.commit();
+    return { success, errors };
+  } catch (err: any) {
+    errors.push(`Batch commit failed: ${err.message}`);
+    return { success: 0, errors };
+  }
+};
+
+export const bulkDeleteStudents = async (
+  regNos: string[],
+  onProgress?: (progress: { current: number; total: number; percent: number }) => void,
+): Promise<{ success: number; failed: number; errors: string[] }> => {
+  const chunks = chunkArray(regNos, BATCH_SIZE);
+  const allErrors: string[] = [];
+  let totalSuccess = 0;
+
+  for (let i = 0; i < chunks.length; i++) {
+    const result = await processDeleteBatch(chunks[i]);
+    totalSuccess += result.success;
+    allErrors.push(...result.errors);
+
+    if (onProgress) {
+      const processed = Math.min((i + 1) * BATCH_SIZE, regNos.length);
+      onProgress({
+        current: processed,
+        total: regNos.length,
+        percent: Math.round((processed / regNos.length) * 100),
+      });
+    }
+  }
+
+  return {
+    success: totalSuccess,
+    failed: allErrors.length,
+    errors: allErrors,
+  };
+};
+
+/**
+ * Update student categories only
+ */
+export const updateStudentCategories = async (
+  regNo: string,
+  categories: { od?: boolean; scholarship?: boolean },
+): Promise<void> => {
+  const regNoUpper = regNo.toUpperCase().trim();
+  const ref = doc(db, STUDENTS_COLLECTION, regNoUpper);
+  await updateDoc(ref, { 
+    categories, 
+    updatedAt: new Date(),
+  });
 };

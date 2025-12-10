@@ -13,16 +13,16 @@ import autoTable from 'jspdf-autotable';
 
 const formatDateKey = (d: Date) => d.toISOString().split('T')[0];
 
-// CSV Export (Name, RegNo, Department)
+// CSV Export (Name, RegNo, Committee, Category)
 const buildCSV = (records: AttendanceRecord[]) => {
-  const header = ['Name', 'Registration Number', 'Department', 'Session'];
+  const header = ['Name', 'Registration Number', 'Committee', 'Category'];
 
   const rows = records.map((r) => {
     return [
       r.studentName || '',
       r.regNo || '',
-      r.department || '',
-      r.sessionName || '',
+      r.committee || '',
+      r.category || '',
     ]
       .map((v) => `"${(v ?? '').toString().replace(/"/g, '""')}"`)
       .join(',');
@@ -43,13 +43,13 @@ const downloadCSV = (csv: string, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
-// Excel Export (Name, RegNo, Department, Session)
+// Excel Export (Name, RegNo, Committee, Category)
 const downloadExcel = (records: AttendanceRecord[], filename: string) => {
   const data = records.map((r) => ({
     Name: r.studentName || '',
     'Registration Number': r.regNo || '',
-    Department: r.department || '',
-    Session: r.sessionName || '',
+    Committee: r.committee || '',
+    Category: r.category?.toUpperCase() || '',
   }));
 
   const worksheet = XLSX.utils.json_to_sheet(data);
@@ -60,15 +60,15 @@ const downloadExcel = (records: AttendanceRecord[], filename: string) => {
   const maxWidths = [
     { wch: Math.max(20, ...data.map((d) => (d.Name || '').length)) },
     { wch: Math.max(20, ...data.map((d) => (d['Registration Number'] || '').length)) },
-    { wch: Math.max(15, ...data.map((d) => (d.Department || '').length)) },
-    { wch: Math.max(15, ...data.map((d) => (d.Session || '').length)) },
+    { wch: Math.max(15, ...data.map((d) => (d.Committee || '').length)) },
+    { wch: Math.max(12, ...data.map((d) => (d.Category || '').length)) },
   ];
   worksheet['!cols'] = maxWidths;
 
   XLSX.writeFile(workbook, filename);
 };
 
-// PDF Export (Name, RegNo, Department, Session)
+// PDF Export (Name, RegNo, Committee, Category) - Black & White
 const downloadPDF = (
   records: AttendanceRecord[],
   filename: string,
@@ -92,33 +92,38 @@ const downloadPDF = (
     doc.text(`Total Students: ${records.length}`, 14, 34);
   }
 
-  // Table
+  // Table data with only 4 columns
   const tableData = records.map((r) => [
     r.studentName || '',
     r.regNo || '',
-    r.department || '',
-    r.sessionName || '',
+    r.committee || '',
+    r.category?.toUpperCase() || '',
   ]);
 
   autoTable(doc, {
-    head: [['Name', 'Registration Number', 'Department', 'Session']],
+    head: [['Name', 'Registration Number', 'Committee', 'Category']],
     body: tableData,
     startY: sessionName ? 45 : 40,
     theme: 'grid',
     headStyles: {
-      fillColor: [245, 158, 11], // Amber-500
-      textColor: [15, 23, 42], // Slate-900
+      fillColor: [255, 255, 255], // White background
+      textColor: [0, 0, 0], // Black text
       fontStyle: 'bold',
+      lineWidth: 0.5,
+      lineColor: [0, 0, 0], // Black border
     },
     styles: {
       fontSize: 9,
       cellPadding: 3,
+      textColor: [0, 0, 0], // Black text
+      lineWidth: 0.5,
+      lineColor: [0, 0, 0], // Black border
     },
     columnStyles: {
       0: { cellWidth: 60 }, // Name
-      1: { cellWidth: 50 }, // RegNo
-      2: { cellWidth: 40 }, // Department
-      3: { cellWidth: 40 }, // Session
+      1: { cellWidth: 45 }, // RegNo
+      2: { cellWidth: 45 }, // Committee
+      3: { cellWidth: 30 }, // Category
     },
     didDrawPage: (data) => {
       // Footer with page numbers
