@@ -10,7 +10,12 @@ import {
   addOrUpdateStudent,
   deleteStudent,
   advancedSearchStudents,
+  getStudentAttendance,
+  addAttendanceRecord,
+  deleteAttendanceRecord,
   Student,
+  StudentAttendance,
+  AttendanceRecord,
   parseCSV,
 } from '@/lib/services/studentService';
 import { CategoryToggle } from '../students/page';
@@ -60,6 +65,20 @@ export default function BulkFetchStudentsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  const [attendanceModal, setAttendanceModal] = useState<{
+    isOpen: boolean;
+    student: Student | null;
+    attendance: StudentAttendance | null;
+  }>({
+    isOpen: false,
+    student: null,
+    attendance: null,
+  });
+  const [loadingAttendance, setLoadingAttendance] = useState(false);
+  const [editingAttendance, setEditingAttendance] = useState<string | null>(null); // date being edited
+  const [newAttendanceDate, setNewAttendanceDate] = useState('');
+  const [newAttendanceStatus, setNewAttendanceStatus] = useState<'present' | 'absent' | 'od' | 'leave'>('present');
+  const [newAttendanceRemarks, setNewAttendanceRemarks] = useState('');
 
   if (loading || !user || !isAdmin(user.email)) {
     return (

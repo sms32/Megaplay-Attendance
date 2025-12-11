@@ -10,9 +10,9 @@ import {
   orderBy,
   where,
   writeBatch,
+  updateDoc,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { updateDoc } from 'firebase/firestore';
 
 export interface Student {
   regNo: string; // Primary key (e.g., "21BECE1001")
@@ -42,6 +42,24 @@ export interface ColumnMapping {
   roomNumber?: string;
   phoneNumber?: string;
   department?: string;
+}
+
+export interface AttendanceRecord {
+  date: string; // Format: "YYYY-MM-DD"
+  status: 'present' | 'absent' | 'od' | 'leave';
+  markedBy?: string; // Admin UID who marked
+  markedAt?: any; // Timestamp
+  remarks?: string;
+}
+
+export interface StudentAttendance {
+  regNo: string;
+  records: AttendanceRecord[];
+  totalPresent?: number;
+  totalAbsent?: number;
+  totalOD?: number;
+  totalLeave?: number;
+  attendancePercentage?: number;
 }
 
 const STUDENTS_COLLECTION = 'students';
@@ -409,9 +427,6 @@ export const parseCSV = (csvText: string): { headers: string[]; rows: any[] } =>
   return { headers, rows };
 };
 
-
-// Add these imports if missing
-
 /**
  * Bulk fetch students by regNos (parallel optimized)
  */
@@ -506,7 +521,6 @@ export const updateStudentCategories = async (
     updatedAt: new Date(),
   });
 };
-// Add this new function to lib/services/studentService.ts
 
 /**
  * Advanced search with filters
@@ -579,4 +593,195 @@ export const advancedSearchStudents = async (filters: {
     console.error('advancedSearchStudents error:', error);
     return [];
   }
+};
+
+/**
+ * Get attendance for a student
+ */
+export const getStudentAttendance = async (regNo: string): Promise<StudentAttendance | null> => {
+  try {
+    const regNoUpper = regNo.toUpperCase().trim();
+    const ref = doc(db, STUDENTS_COLLECTION, regNoUpper, 'attendance', 'records');
+    const snap = await getDoc(ref);
+
+    if (snap.exists()) {
+      const data = snap.data() as StudentAttendance;
+      return calculateAttendanceStats(data);
+    }
+    
+    // Return empty attendance if none exists
+    return {
+      regNo: regNoUpper,
+      records: [],
+      totalPresent: 0,
+      totalAbsent: 0,
+      totalOD: 0,
+      totalLeave: 0,
+      attendancePercentage: 0,
+    };
+  } catch (error) {
+    console.error('getStudentAttendance error:', error);
+    return null;
+  }
+};
+
+/**
+ * Update/Add attendance records for a student
+ */
+export const updateStudentAttendance = async (
+  regNo: string,
+  records: AttendanceRecord[],
+  markedByUid: string
+): Promise<void> => {
+  const regNoUpper = regNo.toUpperCase().trim();
+  const ref = doc(db, STUDENTS_COLLECTION, regNoUpper, 'attendance', 'records');
+
+  // Add metadata to records
+  const updatedRecords = records.map(record => ({
+    ...record,
+    markedBy: markedByUid,
+    markedAt: new Date(),
+  }));
+
+  const attendanceData: StudentAttendance = {
+    regNo: regNoUpper,
+    records: updatedRecords,
+  };
+
+  await setDoc(ref, calculateAttendanceStats(attendanceData), { merge: true });
+};
+
+/**
+ * Add single attendance record
+ */
+export const addAttendanceRecord = async (
+  regNo: string,
+  record: AttendanceRecord,
+  markedByUid: string
+): Promise<void> => {
+  const regNoUpper = regNo.toUpperCase().trim();
+  const ref = doc(db, STUDENTS_COLLECTION, regNoUpper, 'attendance', 'records');
+  
+  // Get existing attendance
+  const existing = await getStudentAttendance(regNoUpper);
+  const existingRecords = existing?.records || [];
+  
+  // Check if date already exists, if so update it, otherwise add new
+  const dateIndex = existingRecords.findIndex(r => r.date === record.date);
+  
+  if (dateIndex >= 0) {
+    existingRecords[dateIndex] = {
+      ...record,
+      markedBy: markedByUid,
+      markedAt: new Date(),
+    };
+  } else {
+    existingRecords.push({
+      ...record,
+      markedBy: markedByUid,
+      markedAt: new Date(),
+    });
+  }
+  
+  // Sort by date (newest first)
+  existingRecords.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  
+  const attendanceData: StudentAttendance = {
+    regNo: regNoUpper,
+    records: existingRecords,
+  };
+
+  await setDoc(ref, calculateAttendanceStats(attendanceData), { merge: true });
+};
+
+/**
+ * Delete attendance record by date
+ */
+export const deleteAttendanceRecord = async (
+  regNo: string,
+  date: string
+): Promise<void> => {
+  const regNoUpper = regNo.toUpperCase().trim();
+  const ref = doc(db, STUDENTS_COLLECTION, regNoUpper, 'attendance', 'records');
+  
+  const existing = await getStudentAttendance(regNoUpper);
+  if (!existing) return;
+  
+  const updatedRecords = existing.records.filter(r => r.date !== date);
+  
+  const attendanceData: StudentAttendance = {
+    regNo: regNoUpper,
+    records: updatedRecords,
+  };
+
+  await setDoc(ref, calculateAttendanceStats(attendanceData), { merge: true });
+};
+
+/**
+ * Calculate attendance statistics
+ */
+const calculateAttendanceStats = (attendance: StudentAttendance): StudentAttendance => {
+  const records = attendance.records || [];
+  
+  const totalPresent = records.filter(r => r.status === 'present').length;
+  const totalAbsent = records.filter(r => r.status === 'absent').length;
+  const totalOD = records.filter(r => r.status === 'od').length;
+  const totalLeave = records.filter(r => r.status === 'leave').length;
+  
+  const totalDays = records.length;
+  const attendancePercentage = totalDays > 0 
+    ? Math.round(((totalPresent + totalOD) / totalDays) * 100) 
+    : 0;
+  
+  return {
+    ...attendance,
+    totalPresent,
+    totalAbsent,
+    totalOD,
+    totalLeave,
+    attendancePercentage,
+  };
+};
+
+/**
+ * Bulk add attendance for multiple students on a specific date
+ */
+export const bulkMarkAttendance = async (
+  attendanceData: { regNo: string; status: 'present' | 'absent' | 'od' | 'leave'; remarks?: string }[],
+  date: string,
+  markedByUid: string,
+  onProgress?: (progress: { current: number; total: number; percent: number }) => void
+): Promise<{ success: number; failed: number; errors: string[] }> => {
+  const errors: string[] = [];
+  let success = 0;
+  
+  for (let i = 0; i < attendanceData.length; i++) {
+    try {
+      const { regNo, status, remarks } = attendanceData[i];
+      
+      await addAttendanceRecord(
+        regNo,
+        { date, status, remarks },
+        markedByUid
+      );
+      
+      success++;
+      
+      if (onProgress) {
+        onProgress({
+          current: i + 1,
+          total: attendanceData.length,
+          percent: Math.round(((i + 1) / attendanceData.length) * 100),
+        });
+      }
+    } catch (err: any) {
+      errors.push(`${attendanceData[i].regNo}: ${err.message}`);
+    }
+  }
+  
+  return {
+    success,
+    failed: errors.length,
+    errors,
+  };
 };
