@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { isAdmin } from '@/lib/utils/adminCheck';
 import { isCoordinatorEmail } from '@/lib/services/coordinatorService';

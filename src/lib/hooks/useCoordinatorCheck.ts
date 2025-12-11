@@ -1,6 +1,6 @@
 // lib/hooks/useCoordinatorCheck.ts
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/app/context/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 import { isCoordinatorEmail } from '@/lib/services/coordinatorService';
 import { useRouter } from 'next/navigation';
 

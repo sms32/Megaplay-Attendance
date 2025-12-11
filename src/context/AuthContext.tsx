@@ -7,9 +7,9 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged
 } from 'firebase/auth';
-import { auth, googleProvider } from '../../lib/firebase/config';
-import { isKarunyaEmail } from '../../lib/validators/emailValidator';
-import { createOrUpdateUserDocument, UserData } from '../../lib/services/userService';
+import { auth, googleProvider } from '../lib/firebase/config';
+import { isKarunyaEmail } from '../lib/validators/emailValidator';
+import { createOrUpdateUserDocument, UserData } from '../lib/services/userService';
 
 interface AuthContextType {
   user: User | null;

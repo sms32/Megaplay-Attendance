@@ -4,7 +4,7 @@
 import { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useAuth } from '@/app/context/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 import { isAdmin } from '@/lib/utils/adminCheck';
 import Image from 'next/image';
 
@@ -41,6 +41,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     { href: '/admin/attendance', label: 'Reports' },
     { href: '/admin/sessions', label: 'Sessions' },
     { href: '/admin/bulk-fetch', label: 'Search' },
+    { href: '/admin/all', label: 'Search All' },
   ];
 
   return (

@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { useAuth } from '@/app/context/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { isAdmin } from '@/lib/utils/adminCheck';
 import { isCoordinatorEmail } from '@/lib/services/coordinatorService';
